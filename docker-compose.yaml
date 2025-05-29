@@ -1,0 +1,65 @@
+services:
+  neo4j:
+    image: neo4j:5.26.0
+    container_name: medical-neo4j
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    env_file:
+      - .env.neo4j
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - neo4j_import:/var/lib/neo4j/import
+      - neo4j_plugins:/plugins
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:7474"]
+      interval: 5s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - medical-kg-network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: medical-kg-app
+    ports:
+      - "${APP_PORT:-7860}:7860"
+    env_file:
+      - .env.app
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - medical-kg-network
+    develop:
+      watch:
+        - action: sync+restart
+          path: .
+          target: /app
+          ignore:
+            - logs/
+            - __pycache__/
+            - venv/
+            - .git/
+            - requirements.txt
+            - .gitingore
+            - .dockerignore
+        - action: rebuild
+          path: requirements.txt
+
+volumes:
+  neo4j_data:
+  neo4j_logs:
+  neo4j_import:
+  neo4j_plugins:
+
+networks:
+  medical-kg-network:
+    driver: bridge
